@@ -29,6 +29,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.PosixParser;
+import org.apache.commons.lang3.time.DateUtils;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.constant.LoggerName;
@@ -48,7 +49,24 @@ public class NamesrvStartup {
     private static CommandLine commandLine = null;
 
     public static void main(String[] args) {
-        main0(args);
+//        main0(args);
+        main1(args);
+    }
+
+    public static void main1(String[] args) {
+        final NamesrvConfig namesrvConfig = new NamesrvConfig();
+        final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+        nettyServerConfig.setListenPort(9876);
+        NamesrvController nameSrvController = new NamesrvController(namesrvConfig, nettyServerConfig);
+        boolean initResult = nameSrvController.initialize();
+        System.out.println("initResult is: " + initResult);
+        try {
+            nameSrvController.start();
+            System.out.println("name server ok");
+            Thread.sleep(DateUtils.MILLIS_PER_DAY);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public static NamesrvController main0(String[] args) {

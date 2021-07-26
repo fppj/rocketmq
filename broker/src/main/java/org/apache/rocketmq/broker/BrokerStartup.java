@@ -22,6 +22,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.PosixParser;
+import org.apache.commons.lang3.time.DateUtils;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.MQVersion;
 import org.apache.rocketmq.common.MixAll;
@@ -37,6 +38,7 @@ import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.srvutil.ServerUtil;
 import org.apache.rocketmq.store.config.BrokerRole;
+import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +57,41 @@ public class BrokerStartup {
     public static InternalLogger log;
 
     public static void main(String[] args) {
-        start(createBrokerController(args));
+//        start(createBrokerController(args));
+        start1(args);
+    }
+
+    public static void start1(String[] args) {
+        // 设置版本号
+        System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
+        // NettyServerConfig 配置
+        final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+        nettyServerConfig.setListenPort(10911);
+        // BrokerConfig 配置
+        final BrokerConfig brokerConfig = new BrokerConfig();
+        brokerConfig.setBrokerName("broker-a");
+        brokerConfig.setNamesrvAddr("127.0.0.1:9876");
+        // MessageStoreConfig 配置
+        final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
+        messageStoreConfig.setDeleteWhen("04");
+        messageStoreConfig.setFileReservedTime(48);
+        messageStoreConfig.setFlushDiskType(FlushDiskType.ASYNC_FLUSH);
+        messageStoreConfig.setDuplicationEnable(false);
+
+        BrokerController brokerController = new BrokerController(
+                brokerConfig,
+                nettyServerConfig,
+                new NettyClientConfig(),
+                messageStoreConfig);
+        try {
+            boolean initializeResult = brokerController.initialize();
+            System.out.println("initializeResult is: " + initializeResult);
+            brokerController.start();
+            System.out.println("broker ok");
+            Thread.sleep(DateUtils.MILLIS_PER_DAY);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public static BrokerController start(BrokerController controller) {
