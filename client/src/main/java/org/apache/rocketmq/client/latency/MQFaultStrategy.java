@@ -24,8 +24,13 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 public class MQFaultStrategy {
     private final static InternalLogger log = ClientLogger.getLog();
+    /**
+     * 延迟容错，根据每个broker发送的延迟，维护对应的信息
+     */
     private final LatencyFaultTolerance<String> latencyFaultTolerance = new LatencyFaultToleranceImpl();
-
+    /**
+     * 延迟容错开关
+     */
     private boolean sendLatencyFaultEnable = false;
 
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
@@ -58,6 +63,7 @@ public class MQFaultStrategy {
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
         if (this.sendLatencyFaultEnable) {
             try {
+                // 开启延迟容错开关后，轮询获取的队列需要满足对应的broker可用
                 int index = tpInfo.getSendWhichQueue().incrementAndGet();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
@@ -67,10 +73,11 @@ public class MQFaultStrategy {
                     if (latencyFaultTolerance.isAvailable(mq.getBrokerName()))
                         return mq;
                 }
-
+                // 没有可用的队列时，从（是否可用、延迟时长、可用时间点）排序（此时没有可用的broker）的broker中选择较靠前的一批broker进行轮询
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
+                    // 选择队列
                     final MessageQueue mq = tpInfo.selectOneMessageQueue();
                     if (notBestBroker != null) {
                         mq.setBrokerName(notBestBroker);
@@ -78,15 +85,17 @@ public class MQFaultStrategy {
                     }
                     return mq;
                 } else {
+                    // 这个broker下没有队列
                     latencyFaultTolerance.remove(notBestBroker);
                 }
             } catch (Exception e) {
                 log.error("Error occurred when selecting message queue", e);
             }
-
+            // 兜底，轮询选择一个队列
             return tpInfo.selectOneMessageQueue();
         }
 
+        // 在不开启延迟容错情况下，轮询选择一个队列，同时避免和上一次队列相同
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
 
