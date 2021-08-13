@@ -263,6 +263,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 if (ackIndex >= consumeRequest.getMsgs().size()) {
                     ackIndex = consumeRequest.getMsgs().size() - 1;
                 }
+                // 手动提交的ackIndex从0开始
                 int ok = ackIndex + 1;
                 int failed = consumeRequest.getMsgs().size() - ok;
                 this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), ok);
@@ -285,6 +286,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 }
                 break;
             case CLUSTERING:
+                // 从ackIndex + 1 位开始之后的消息，都是消费失败的，需要重发回重试队列
                 List<MessageExt> msgBackFailed = new ArrayList<MessageExt>(consumeRequest.getMsgs().size());
                 for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {
                     MessageExt msg = consumeRequest.getMsgs().get(i);
@@ -297,16 +299,23 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
                 if (!msgBackFailed.isEmpty()) {
                     consumeRequest.getMsgs().removeAll(msgBackFailed);
-
+                    // 重发回重试队列失败的消息，会在客户端延迟重新执行
                     this.submitConsumeRequestLater(msgBackFailed, consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue());
                 }
                 break;
             default:
                 break;
         }
-
+        /*
+         * 从processQueue中将已消费以及发回重试队列的消息移除，
+         * 如果缓存的消息都消费完了，返回最后一条消息offset+1，如果没有消费完，返回最前一条消息offset
+         * 1.如果rebalance后该队列没有分配到其它consumer，则该consumer继续从该队列pull消息消费，直到达到span阈值后不pull消息了
+         * 2.如果rebalance后该队列分配到其它consumer，则因为broker中offset停留在最前一条消息，导致重复消费
+         * 解决方案：定时任务清理超时的消息
+         */
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
+            // 维护本地缓存的队列偏移量，由定时任务负责提交到broker
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);
         }
     }
@@ -406,6 +415,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             try {
                 if (msgs != null && !msgs.isEmpty()) {
                     for (MessageExt msg : msgs) {
+                        // 消息超时仍然不能消费完成或者重新发回到重试队列，将会被清理
                         MessageAccessor.setConsumeStartTimeStamp(msg, String.valueOf(System.currentTimeMillis()));
                     }
                 }
@@ -455,6 +465,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 .incConsumeRT(ConsumeMessageConcurrentlyService.this.consumerGroup, messageQueue.getTopic(), consumeRT);
 
             if (!processQueue.isDropped()) {
+                // 提交消费进度，同时重放失败的消息
                 ConsumeMessageConcurrentlyService.this.processConsumeResult(status, context, this);
             } else {
                 log.warn("processQueue is dropped without process consume result. messageQueue={}, msgs={}", messageQueue, msgs);

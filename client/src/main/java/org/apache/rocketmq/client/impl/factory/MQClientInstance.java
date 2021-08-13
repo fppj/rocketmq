@@ -272,6 +272,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 定时更新该客户端实例下所有producer和consumer的topic路由信息（topic下队列，broker地址等）
                     MQClientInstance.this.updateTopicRouteInfoFromNameServer();
                 } catch (Exception e) {
                     log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
@@ -659,6 +660,7 @@ public class MQClientInstance {
                                     Entry<String, MQConsumerInner> entry = it.next();
                                     MQConsumerInner impl = entry.getValue();
                                     if (impl != null) {
+                                        // 已subscribeInner中订阅的topic为准
                                         impl.updateTopicSubscribeInfo(topic, subscribeInfo);
                                     }
                                 }
