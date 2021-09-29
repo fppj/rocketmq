@@ -261,6 +261,7 @@ public class BrokerController {
         result = result && this.messageStore.load();
 
         if (result) {
+            // VIP通道的配置克隆自普通通道，唯一区别端口号是-2
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
@@ -492,12 +493,14 @@ public class BrokerController {
             this.transactionalMessageService = new TransactionalMessageServiceImpl(new TransactionalMessageBridge(this, this.getMessageStore()));
             log.warn("Load default transaction message hook service: {}", TransactionalMessageServiceImpl.class.getSimpleName());
         }
+        // 需要执行消息回查的监听器
         this.transactionalMessageCheckListener = ServiceProvider.loadClass(ServiceProvider.TRANSACTION_LISTENER_ID, AbstractTransactionalMessageCheckListener.class);
         if (null == this.transactionalMessageCheckListener) {
             this.transactionalMessageCheckListener = new DefaultTransactionalMessageCheckListener();
             log.warn("Load default discard message hook service: {}", DefaultTransactionalMessageCheckListener.class.getSimpleName());
         }
         this.transactionalMessageCheckListener.setBrokerController(this);
+        // 负责判断half topic中消息是否需要回查
         this.transactionalMessageCheckService = new TransactionalMessageCheckService(this);
     }
 
@@ -849,10 +852,11 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
+        // 存储层服务，如CommitLog、ConsumeQueue
         if (this.messageStore != null) {
             this.messageStore.start();
         }
-
+        // 通信层服务
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
@@ -864,19 +868,19 @@ public class BrokerController {
         if (this.fileWatchService != null) {
             this.fileWatchService.start();
         }
-
+        // broker访问对外接口的封装对象
         if (this.brokerOuterAPI != null) {
             this.brokerOuterAPI.start();
         }
-
+        // 长轮询服务
         if (this.pullRequestHoldService != null) {
             this.pullRequestHoldService.start();
         }
-
+        // 清理超时的生产者、消费者、过滤服务器
         if (this.clientHousekeepingService != null) {
             this.clientHousekeepingService.start();
         }
-
+        // 过滤服务器管理
         if (this.filterServerManager != null) {
             this.filterServerManager.start();
         }
@@ -886,7 +890,7 @@ public class BrokerController {
             handleSlaveSynchronize(messageStoreConfig.getBrokerRole());
             this.registerBrokerAll(true, false, true);
         }
-
+        // 将broker注册到nameserver
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -898,11 +902,11 @@ public class BrokerController {
                 }
             }
         }, 1000 * 10, Math.max(10000, Math.min(brokerConfig.getRegisterNameServerPeriod(), 60000)), TimeUnit.MILLISECONDS);
-
+        // broker监控数据统计管理
         if (this.brokerStatsManager != null) {
             this.brokerStatsManager.start();
         }
-
+        // broker快速失败处理
         if (this.brokerFastFailure != null) {
             this.brokerFastFailure.start();
         }
@@ -931,6 +935,7 @@ public class BrokerController {
     public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway, boolean forceRegister) {
         TopicConfigSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildTopicConfigSerializeWrapper();
 
+        // 读写权限已broker配置为准
         if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
             || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
             ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<String, TopicConfig>();

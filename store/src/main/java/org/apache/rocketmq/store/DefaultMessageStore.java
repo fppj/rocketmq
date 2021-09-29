@@ -71,7 +71,7 @@ public class DefaultMessageStore implements MessageStore {
     private final CommitLog commitLog;
 
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
-
+    // consumeQueue刷盘
     private final FlushConsumeQueueService flushConsumeQueueService;
 
     private final CleanCommitLogService cleanCommitLogService;
@@ -82,10 +82,11 @@ public class DefaultMessageStore implements MessageStore {
 
     private final AllocateMappedFileService allocateMappedFileService;
 
+    // 消息重放
     private final ReputMessageService reputMessageService;
-
+    // 主从同步
     private final HAService haService;
-
+    // 延迟消息
     private final ScheduleMessageService scheduleMessageService;
 
     private final StoreStatsService storeStatsService;
@@ -102,7 +103,7 @@ public class DefaultMessageStore implements MessageStore {
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
-
+    // 存储点位检查，刷盘的最新一条消息时间，
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
@@ -287,6 +288,7 @@ public class DefaultMessageStore implements MessageStore {
         this.commitLog.start();
         this.storeStatsService.start();
 
+        // abort空白文件，服务正常关闭时删除
         this.createTempFile();
         this.addScheduleTask();
         this.shutdown = false;

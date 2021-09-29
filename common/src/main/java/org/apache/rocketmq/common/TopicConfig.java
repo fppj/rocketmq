@@ -25,9 +25,9 @@ public class TopicConfig {
     private String topicName;
     private int readQueueNums = defaultReadQueueNums;
     private int writeQueueNums = defaultWriteQueueNums;
-    private int perm = PermName.PERM_READ | PermName.PERM_WRITE;
+    private int perm = PermName.PERM_READ | PermName.PERM_WRITE;  // 读写权限
     private TopicFilterType topicFilterType = TopicFilterType.SINGLE_TAG;
-    private int topicSysFlag = 0;
+    private int topicSysFlag = 0;  // 同步还是异步复制
     private boolean order = false;
 
     public TopicConfig() {
