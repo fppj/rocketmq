@@ -74,7 +74,7 @@ public class NamesrvController {
     }
 
     public boolean initialize() {
-
+        // 加载KV配置
         this.kvConfigManager.load();
 
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
@@ -84,6 +84,7 @@ public class NamesrvController {
 
         this.registerProcessor();
 
+        // 定时任务剔除不可用broker
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override

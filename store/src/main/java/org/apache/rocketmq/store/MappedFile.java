@@ -29,6 +29,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.rocketmq.common.UtilAll;
@@ -581,5 +582,22 @@ public class MappedFile extends ReferenceResource {
     @Override
     public String toString() {
         return this.fileName;
+    }
+
+    public static void main(String[] args) {
+        ByteBuffer byteBuffer = ByteBuffer.allocate(20);
+        ByteBuffer sliceOne = byteBuffer.slice();
+        sliceOne.putInt(1);
+        System.out.println(sliceOne.toString() + "---" + Arrays.toString(sliceOne.array()));
+        System.out.println(byteBuffer.toString() + "---" + Arrays.toString(byteBuffer.array()));
+        ByteBuffer sliceTwo = byteBuffer.slice();
+        sliceTwo.position(4);
+        sliceTwo.putLong(2L);
+        System.out.println(sliceTwo.toString() + "---" + Arrays.toString(sliceTwo.array()));
+        System.out.println(byteBuffer.toString() + "---" + Arrays.toString(byteBuffer.array()));
+
+        System.out.println(byteBuffer.getInt(0));
+        System.out.println(byteBuffer.getLong(4));
+
     }
 }
