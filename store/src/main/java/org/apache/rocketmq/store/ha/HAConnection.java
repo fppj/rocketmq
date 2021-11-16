@@ -223,6 +223,8 @@ public class HAConnection {
 
                     if (-1 == this.nextTransferFromWhere) {
                         if (0 == HAConnection.this.slaveRequestOffset) {
+                            // slaveRequestOffset为slave和master建立连接后第一次上报的ack点位，为0
+                            // 如果slave为新添加入节点，同步点位从master当前文件开始
                             long masterOffset = HAConnection.this.haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
                             masterOffset =
                                 masterOffset

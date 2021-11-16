@@ -240,10 +240,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
         switch (status) {
             case CONSUME_SUCCESS:
+                // 默认这批消息都消费成功
                 if (ackIndex >= consumeRequest.getMsgs().size()) {
                     ackIndex = consumeRequest.getMsgs().size() - 1;
                 }
-                // 手动提交的ackIndex从0开始
+                // 手动提交的ackIndex从0开始计数（注意消息重复消费和丢失问题）
                 int ok = ackIndex + 1;
                 int failed = consumeRequest.getMsgs().size() - ok;
                 this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), ok);
@@ -287,11 +288,12 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 break;
         }
         /*
-         * 从processQueue中将已消费以及发回重试队列的消息移除，
+         * 从processQueue中将已消费以及发回重试队列的消息移除
          * 如果缓存的消息都消费完了，返回最后一条消息offset+1，如果没有消费完，返回最前一条消息offset
-         * 1.如果rebalance后该队列没有分配到其它consumer，则该consumer继续从该队列pull消息消费，直到达到span阈值后不pull消息了
+         * 1.如果rebalance后该队列没有分配到其它客户端的consumer，则该consumer继续从该队列pull消息消费，直到达到span阈值后不pull消息了
          * 2.如果rebalance后该队列分配到其它consumer，则因为broker中offset停留在最前一条消息，导致重复消费
-         * 解决方案：定时任务清理超时的消息
+         * 两条未成功消费提交的消息跨度超过阈值，会导致不继续拉取消息
+         * 解决方案：定时任务清理超时的消息（发回重试队列并从本地缓存移除）
          */
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {

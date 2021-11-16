@@ -142,6 +142,7 @@ public class ConsumeQueue {
             processOffset += mappedFileOffset;
             this.mappedFileQueue.setFlushedWhere(processOffset);
             this.mappedFileQueue.setCommittedWhere(processOffset);
+            // load时commitLog所有文件点位都是size，需要根据实际数据截断
             this.mappedFileQueue.truncateDirtyFiles(processOffset);
 
             if (isExtReadEnable()) {

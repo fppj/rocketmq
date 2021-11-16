@@ -95,7 +95,7 @@ public class MQFaultStrategy {
             return tpInfo.selectOneMessageQueue();
         }
 
-        // 在不开启延迟容错情况下，轮询选择一个队列，同时避免和上一次队列相同
+        // 在不开启延迟容错情况下，轮询选择一个队列，同时避免和上一次broker相同
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
 

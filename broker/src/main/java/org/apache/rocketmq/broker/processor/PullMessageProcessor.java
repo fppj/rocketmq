@@ -256,20 +256,24 @@ public class PullMessageProcessor extends AsyncNettyRequestProcessor implements 
                 case SYNC_MASTER:
                     break;
                 case SLAVE:
+                    // 关闭slaveReadEnable切换到从master拉取消息
                     if (!this.brokerController.getBrokerConfig().isSlaveReadEnable()) {
                         response.setCode(ResponseCode.PULL_RETRY_IMMEDIATELY);
                         responseHeader.setSuggestWhichBrokerId(MixAll.MASTER_ID);
                     }
                     break;
             }
-
+            // 开启slaveReadEnable后，如果主服务器未消费消息占物理内存达40%，下次拉取从whichBrokerWhenConsumeSlowly配置的broker拉取
             if (this.brokerController.getBrokerConfig().isSlaveReadEnable()) {
                 // consume too slow ,redirect to another machine
                 if (getMessageResult.isSuggestPullingFromSlave()) {
+                    // 如果指定的slave也慢了，修改whichBrokerWhenConsumeSlowly切换到另外的slave
                     responseHeader.setSuggestWhichBrokerId(subscriptionGroupConfig.getWhichBrokerWhenConsumeSlowly());
                 }
                 // consume ok
                 else {
+                    // 如果主服务器消费正常，则下次拉取使用订阅中的默认服务器（主服务器）
+                    // 如果不修改订阅中默认服务器，从服务器拉取一次后下次还是回到主服务器拉取
                     responseHeader.setSuggestWhichBrokerId(subscriptionGroupConfig.getBrokerId());
                 }
             } else {
@@ -460,7 +464,7 @@ public class PullMessageProcessor extends AsyncNettyRequestProcessor implements 
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("store getMessage return null");
         }
-
+        // broker是否允许挂起，消息拉取时默认为true
         boolean storeOffsetEnable = brokerAllowSuspend;
         storeOffsetEnable = storeOffsetEnable && hasCommitOffsetFlag;
         storeOffsetEnable = storeOffsetEnable

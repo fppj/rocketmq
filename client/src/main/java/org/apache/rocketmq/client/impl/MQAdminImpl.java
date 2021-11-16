@@ -201,6 +201,7 @@ public class MQAdminImpl {
     }
 
     public long maxOffset(MessageQueue mq) throws MQClientException {
+        // 获取master的地址
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());

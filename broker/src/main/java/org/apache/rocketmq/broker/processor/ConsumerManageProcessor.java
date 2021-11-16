@@ -138,6 +138,7 @@ public class ConsumerManageProcessor extends AsyncNettyRequestProcessor implemen
             long minOffset =
                 this.brokerController.getMessageStore().getMinOffsetInQueue(requestHeader.getTopic(),
                     requestHeader.getQueueId());
+            // 当没有消费进度时且consumeQueue中最小点位为0，检查commitLog中第一条消息是否在内存中，如果文件数据不存在或者在内存中，则返回0
             if (minOffset <= 0
                 && !this.brokerController.getMessageStore().checkInDiskByConsumeOffset(
                 requestHeader.getTopic(), requestHeader.getQueueId(), 0)) {

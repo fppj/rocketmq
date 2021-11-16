@@ -229,7 +229,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        // 移除已经不属于该topic的messageQueue
         this.truncateMessageQueueNotMyTopic();
     }
 
@@ -257,9 +257,9 @@ public abstract class RebalanceImpl {
                 break;
             }
             case CLUSTERING: {
-                // reblance所需元数据，mqSet为topic下队列集合
+                // rebalance所需元数据，mqSet为topic下队列集合
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
-                // 选取任意一个broker获取ConsumerManager中信息
+                // 选取任意一个broker获取ConsumerManager中信息（心跳包中包含clientId）
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -298,7 +298,8 @@ public abstract class RebalanceImpl {
                     if (allocateResult != null) {
                         allocateResultSet.addAll(allocateResult);
                     }
-
+                    // rebalance之后如果topic分配到的队列有变化，移除不存在的messageQueue及pull消息超时的messageQueue（同步本地的消费点位到broker）
+                    //
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);
                     if (changed) {
                         log.info(
@@ -375,6 +376,7 @@ public abstract class RebalanceImpl {
         for (MessageQueue mq : mqSet) {
             // 该consumer分配到的queue是原先没有的
             if (!this.processQueueTable.containsKey(mq)) {
+                // 如果是顺序消息场景，在分配新queue前需要先lock成功
                 if (isOrder && !this.lock(mq)) {
                     log.warn("doRebalance, {}, add a new mq failed, {}, because lock failed", consumerGroup, mq);
                     continue;
@@ -386,6 +388,7 @@ public abstract class RebalanceImpl {
                 // pullRequest中初始消费点位
                 long nextOffset = -1L;
                 try {
+                    // 从broker读取该messageQueue消费进度缓存到本地store
                     nextOffset = this.computePullFromWhereWithException(mq);
                 } catch (Exception e) {
                     log.info("doRebalance, {}, compute offset failed, {}", consumerGroup, mq);

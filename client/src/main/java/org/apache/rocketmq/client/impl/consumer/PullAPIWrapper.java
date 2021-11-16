@@ -154,6 +154,7 @@ public class PullAPIWrapper {
         final CommunicationMode communicationMode,
         final PullCallback pullCallback
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        // 优先根据维护在pullFromWhichNodeTable中指定brokerId信息，查找对应的地址
         FindBrokerResult findBrokerResult =
             this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
                 this.recalculatePullFromWhichNode(mq), false);
@@ -175,6 +176,8 @@ public class PullAPIWrapper {
             }
             int sysFlagInner = sysFlag;
 
+            // 从slave拉取到消息时，不需要内存中缓存消费进度
+            // 从master拉取消息时，会结合该变量判断取请求头中缓存的消费进度更新broker中消费进度信息
             if (findBrokerResult.isSlave()) {
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }
