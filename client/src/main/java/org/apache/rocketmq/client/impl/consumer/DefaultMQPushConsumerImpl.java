@@ -255,7 +255,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             }
             return;
         }
-        // 当缓存的消息offset间隔大于阈值，触发流控（卡消息问题，导致不拉取消息）
+        // 并发消费情况下，当缓存的消息offset间隔大于阈值，触发流控（卡消息问题，导致不拉取消息）
         if (!this.consumeOrderly) {
             if (processQueue.getMaxSpan() > this.defaultMQPushConsumer.getConsumeConcurrentlyMaxSpan()) {
                 this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL);
@@ -268,10 +268,12 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 return;
             }
         } else {
+            //
             if (processQueue.isLocked()) {
                 if (!pullRequest.isPreviouslyLocked()) {
                     long offset = -1L;
                     try {
+                        // 如果是该consumerGroup不是第一次启动消费，则都从上一条未消费的消息开始消费，否则根据配置
                         offset = this.rebalanceImpl.computePullFromWhereWithException(pullRequest.getMessageQueue());
                     } catch (MQClientException e) {
                         this.executePullRequestLater(pullRequest, pullTimeDelayMillsWhenException);
@@ -665,11 +667,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             default:
                 break;
         }
-        // 从nameserver更新topic路由信息
+        // 从nameServer更新topic路由信息
         this.updateTopicSubscribeInfoWhenSubscriptionChanged();
         // 检查consumer的subscriptionData配置
         this.mQClientFactory.checkClientInBroker();
-        // 发送心跳信息
+        // 发送心跳信息给客户端涉及topic相关的每一台broker（客户端中broker地址从路由信息更新时获取）
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
         // 立即执行一次rebalance
         this.mQClientFactory.rebalanceImmediately();
@@ -848,7 +850,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     private void copySubscription() throws MQClientException {
         try {
             Map<String, String> sub = this.defaultMQPushConsumer.getSubscription();
-            // 随着defaultPushConsumer.setSubscription()过期，此时size=0
+            // defaultPushConsumer.setSubscription()方法已过期
             if (sub != null) {
                 for (final Map.Entry<String, String> entry : sub.entrySet()) {
                     final String topic = entry.getKey();
@@ -898,7 +900,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
     public void subscribe(String topic, String subExpression) throws MQClientException {
         try {
-            // 如果是tag方式过滤消息，会在broker根据tag的hashCode进行初步过滤
+            // 如果是tag方式过滤消息，会在broker根据tag的hashCode进行初步过滤，减少无效网络传输
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(topic, subExpression);
             this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);
             if (this.mQClientFactory != null) {

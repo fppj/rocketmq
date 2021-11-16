@@ -62,6 +62,7 @@ import org.apache.rocketmq.store.schedule.ScheduleMessageService;
  * Store all metadata downtime for recovery, data protection reliability
  */
 public class DLedgerCommitLog extends CommitLog {
+    // 基于raft协议实现的集群中的一台节点
     private final DLedgerServer dLedgerServer;
     private final DLedgerConfig dLedgerConfig;
     private final DLedgerMmapFileStore dLedgerFileStore;
@@ -74,8 +75,9 @@ public class DLedgerCommitLog extends CommitLog {
     private volatile long beginTimeInDledgerLock = 0;
 
     //This offset separate the old commitlog from dledger commitlog
+    // 旧commitLog的消息最大偏移量，如果访问的偏移量大于它，则访问dLegerCommitLog
     private long dividedCommitlogOffset = -1;
-
+    // 旧commitLog是否正在恢复
     private boolean isInrecoveringOldCommitlog = false;
 
     private final StringBuilder msgIdBuilder = new StringBuilder();
@@ -261,12 +263,16 @@ public class DLedgerCommitLog extends CommitLog {
     }
 
     private void recover(long maxPhyOffsetOfConsumeQueue) {
+        // 加载构建文件对应的MMapFile，初始化flushedOffset,wroteOffset,committedOffset为文件大小
         dLedgerFileStore.load();
         if (dLedgerFileList.getMappedFiles().size() > 0) {
+            // 恢复MMapFile，设置对应的flushedOffset,wroteOffset,committedOffset
             dLedgerFileStore.recover();
+            // 设置为dLegerCommitLog的最小偏移量，对应commitLog最大偏移量
             dividedCommitlogOffset = dLedgerFileList.getFirstMappedFile().getFileFromOffset();
             MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
             if (mappedFile != null) {
+                // 如果存在旧commitLog，禁止删除dLegerCommitLog的文件，防止出现偏移量断层
                 disableDeleteDledger();
             }
             long maxPhyOffset = dLedgerFileList.getMaxWrotePosition();
@@ -277,6 +283,7 @@ public class DLedgerCommitLog extends CommitLog {
             }
             return;
         }
+        // 第一次启动dLeger，需要先恢复旧commitLog
         //Indicate that, it is the first time to load mixed commitlog, need to recover the old commitlog
         isInrecoveringOldCommitlog = true;
         //No need the abnormal recover
@@ -298,8 +305,10 @@ public class DLedgerCommitLog extends CommitLog {
             log.info("Recover old commitlog found a illegal magic code={}", magicCode);
         }
         dLedgerConfig.setEnableDiskForceClean(false);
+        // commitLog最大偏移量
         dividedCommitlogOffset = mappedFile.getFileFromOffset() + mappedFile.getFileSize();
         log.info("Recover old commitlog needWriteMagicCode={} pos={} file={} dividedCommitlogOffset={}", needWriteMagicCode, mappedFile.getFileFromOffset() + mappedFile.getWrotePosition(), mappedFile.getFileName(), dividedCommitlogOffset);
+        // 如果dLeger第一次启动，需要填充空白文件
         if (needWriteMagicCode) {
             byteBuffer.position(mappedFile.getWrotePosition());
             byteBuffer.putInt(mappedFile.getFileSize() - mappedFile.getWrotePosition());
@@ -672,10 +681,12 @@ public class DLedgerCommitLog extends CommitLog {
             request.setGroup(dLedgerConfig.getGroup());
             request.setRemoteId(dLedgerServer.getMemberState().getSelfId());
             request.setBody(encodeResult.getData());
+            // 提交给节点进行消息追加与复制，只有半数节点复制成功，才返回成功
             dledgerFuture = (AppendFuture<AppendEntryResponse>) dLedgerServer.handleAppend(request);
             if (dledgerFuture.getPos() == -1) {
                 return CompletableFuture.completedFuture(new PutMessageResult(PutMessageStatus.OS_PAGECACHE_BUSY, new AppendMessageResult(AppendMessageStatus.UNKNOWN_ERROR)));
             }
+            // 返回的是body的物理偏移量，即和commitLog返回的物理偏移量一样含义，代表该条消息内容物理偏移量
             long wroteOffset = dledgerFuture.getPos() + DLedgerEntry.BODY_OFFSET;
 
             int msgIdLength = (msg.getSysFlag() & MessageSysFlag.STOREHOSTADDRESS_V6_FLAG) == 0 ? 4 + 4 + 8 : 16 + 4 + 8;

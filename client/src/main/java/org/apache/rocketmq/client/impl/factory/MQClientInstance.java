@@ -285,7 +285,9 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 移除下线的broker，brokerAddrTable在获取路由信息时同步增量更新
                     MQClientInstance.this.cleanOfflineBroker();
+                    //
                     MQClientInstance.this.sendHeartbeatToAllBrokerWithLock();
                 } catch (Exception e) {
                     log.error("ScheduledTask sendHeartbeatToAllBroker exception", e);
@@ -298,6 +300,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    // 同步offsetStore中各messageQueue的消费进度到broker
                     MQClientInstance.this.persistAllConsumerOffset();
                 } catch (Exception e) {
                     log.error("ScheduledTask persistAllConsumerOffset exception", e);
@@ -626,6 +629,9 @@ public class MQClientInstance {
                         TopicRouteData old = this.topicRouteTable.get(topic);
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
+                            // 在客户端缓存的路由信息和服务端一致的情况下，判断producer和consumer中相关信息是否需要更新
+                            // producer：topicPublishInfo没有或者不可用
+                            // consumer：rebalance中订阅信息没有对应队列信息
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
@@ -1045,11 +1051,12 @@ public class MQClientInstance {
             slave = brokerId != MixAll.MASTER_ID;
             found = brokerAddr != null;
 
+            // salve地址未找到，找下一个
             if (!found && slave) {
                 brokerAddr = map.get(brokerId + 1);
                 found = brokerAddr != null;
             }
-
+            // 未找到且不必须指定broker，找第一个有地址的
             if (!found && !onlyThisBroker) {
                 Entry<Long, String> entry = map.entrySet().iterator().next();
                 brokerAddr = entry.getValue();

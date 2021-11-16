@@ -433,6 +433,7 @@ public class CommitLog {
             MappedFile mappedFile = null;
             for (; index >= 0; index--) {
                 mappedFile = mappedFiles.get(index);
+                // 比较文件中第一条消息时间小于点位检查中最小时间，如果大于则表示整个文件中数据不安全，需要逐条检查
                 if (this.isMappedFileMatchedRecover(mappedFile)) {
                     log.info("recover from this mapped file " + mappedFile.getFileName());
                     break;
@@ -936,6 +937,7 @@ public class CommitLog {
 
     public CompletableFuture<PutMessageStatus> submitReplicaRequest(AppendMessageResult result, MessageExt messageExt) {
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
+            // 开启DLedger后HaService就不需要HaService
             HAService service = this.defaultMessageStore.getHaService();
             if (messageExt.isWaitStoreMsgOK()) {
                 if (service.isSlaveOK(result.getWroteBytes() + result.getWroteOffset())) {
@@ -1317,6 +1319,7 @@ public class CommitLog {
                 }
 
                 try {
+                    // 开启定时异步刷盘后，无法实时唤醒
                     if (flushCommitLogTimed) {
                         Thread.sleep(interval);
                     } else {
@@ -1329,6 +1332,7 @@ public class CommitLog {
 
                     long begin = System.currentTimeMillis();
                     CommitLog.this.mappedFileQueue.flush(flushPhysicQueueLeastPages);
+                    // 点位检查需要的时间，在flushLeastPages=0时记录已刷盘的最新一条消息的时间
                     long storeTimestamp = CommitLog.this.mappedFileQueue.getStoreTimestamp();
                     if (storeTimestamp > 0) {
                         CommitLog.this.defaultMessageStore.getStoreCheckpoint().setPhysicMsgTimestamp(storeTimestamp);
@@ -1429,6 +1433,7 @@ public class CommitLog {
                         // two times the flush
                         boolean flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
                         for (int i = 0; i < 2 && !flushOK; i++) {
+                            // 可能上次才刷到上一页
                             CommitLog.this.mappedFileQueue.flush(0);
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
                         }
@@ -1445,6 +1450,7 @@ public class CommitLog {
                 } else {
                     // Because of individual messages is set to not sync flush, it
                     // will come to this process
+                    // msg里指定waitMsgStoreOk属性为false
                     CommitLog.this.mappedFileQueue.flush(0);
                 }
             }

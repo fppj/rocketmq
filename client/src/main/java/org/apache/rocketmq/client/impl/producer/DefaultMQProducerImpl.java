@@ -190,7 +190,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 this.serviceState = ServiceState.START_FAILED;
                 // 检查producerGroup名称是否合法
                 this.checkConfig();
-                // 存在一个内部producerGroup于mqClientInstance的内部
+                // mqClientInstance启动时会启动内部默认的一个生产者实例()，通过参数startFactory=false避免死循环
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
@@ -203,7 +203,6 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         + "] has been created before, specify another name please." + FAQUrl.suggestTodo(FAQUrl.GROUP_NAME_DUPLICATE_URL),
                         null);
                 }
-                // 注册topic路由信息到本地缓存
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
 
                 // 核心步骤，启动一些服务
@@ -227,7 +226,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
         // 发送心跳包
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
-
+        // 将超时的请求移除，并执行回调返回
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -571,12 +570,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             MessageQueue mq = null;
             Exception exception = null;
             SendResult sendResult = null;
+            // 生产者消息重投，会导致重复消息
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             int times = 0;
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal; times++) {
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
-                // 选择一个队列进行发送，如果开启了延时容错开关，需要优先考虑可用的broker下选择
+                // 选择一个队列进行发送，如果开启了延时容错开关，需要优先考虑可用的broker下选择（可用性保障）
+                // 可以避免topic路由信息延迟导致的部分broker信息变更使得发送失败，如主从切换
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
                 if (mqSelected != null) {
                     mq = mqSelected;

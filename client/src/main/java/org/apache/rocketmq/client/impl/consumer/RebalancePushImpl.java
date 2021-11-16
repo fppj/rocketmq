@@ -161,6 +161,8 @@ public class RebalancePushImpl extends RebalanceImpl {
             case CONSUME_FROM_MIN_OFFSET:
             case CONSUME_FROM_MAX_OFFSET:
             case CONSUME_FROM_LAST_OFFSET: {
+                // 不是第一次启动进行消费，从上次点位接着消费
+                // 存在第一次启动消费也是从第一条消息开始现象（readOffset返回lastOffset=0，在broker中获取消费进度点位为-1且consumeQueue中最小点位为0时会检查第一条消息是否映射在内存中，如果在或者消息已经被删除，则返回0，从头开始消费）
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
                 if (lastOffset >= 0) {
                     result = lastOffset;
@@ -171,6 +173,7 @@ public class RebalancePushImpl extends RebalanceImpl {
                         result = 0L;
                     } else {
                         try {
+                            // 是第一次启动消费时，根据配置，从最后一条消息开始消费
                             result = this.mQClientFactory.getMQAdminImpl().maxOffset(mq);
                         } catch (MQClientException e) {
                             log.warn("Compute consume offset from last offset exception, mq={}, exception={}", mq, e);
