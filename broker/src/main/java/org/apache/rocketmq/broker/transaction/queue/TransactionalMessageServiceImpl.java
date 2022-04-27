@@ -147,8 +147,10 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                     continue;
                 }
                 // check完成的消息位点 opQueueLogicOffset
+                // 避免重复执行回查
                 List<Long> doneOpOffset = new ArrayList<>();
                 // 存储已经执行了commit/rollback消息的位点  halfQueueOffset -- opQueueLogicOffset
+                // 不需要执行回查
                 HashMap<Long, Long> removeMap = new HashMap<>();
                 PullResult pullResult = fillOpRemoveMap(removeMap, opQueue, opOffset, halfOffset, doneOpOffset);
                 if (null == pullResult) {
@@ -190,6 +192,7 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                         }
 
                         if (needDiscard(msgExt, transactionCheckMax) || needSkip(msgExt)) {
+                            // 丢弃的消息
                             listener.resolveDiscardMsg(msgExt);
                             newOffset = i + 1;
                             i++;
@@ -224,8 +227,11 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                         boolean isNeedCheck = (opMsg == null && valueOfCurrentMinusBorn > checkImmunityTime)
                             || (opMsg != null && (opMsg.get(opMsg.size() - 1).getBornTimestamp() - startTime > transactionTimeout))
                             || (valueOfCurrentMinusBorn <= -1);
-
+                        // 需要回查
                         if (isNeedCheck) {
+                            // 回查前将half消息重放到half队列中，同时重置相应offset到最新点位
+                            // 如果回查失败，后续会继续被回查
+                            // 如果回查成功，op队列中消息会存在对应的该消息offset，下次会被跳过回查
                             if (!putBackHalfMsgQueue(msgExt, i)) {
                                 continue;
                             }
@@ -335,6 +341,7 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
             if (-1 == prepareQueueOffset) {
                 return false;
             } else {
+                // 免疫时间内避免检查的消息可能一段时间后重新检查时已经被commit或者rollback
                 if (removeMap.containsKey(prepareQueueOffset)) {
                     long tmpOpOffset = removeMap.remove(prepareQueueOffset);
                     doneOpOffset.add(tmpOpOffset);

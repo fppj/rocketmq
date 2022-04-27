@@ -17,6 +17,7 @@
 package org.apache.rocketmq.common.message;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 public class MessageQueue implements Comparable<MessageQueue>, Serializable {
     private static final long serialVersionUID = 6191200464116433425L;

@@ -388,7 +388,7 @@ public class BrokerController {
                         log.error("printWaterMark error.", e);
                     }
                 }
-            }, 10, 1, TimeUnit.SECONDS);
+            }, 10, 60, TimeUnit.SECONDS);
 
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
